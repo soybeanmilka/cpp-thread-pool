@@ -28,12 +28,17 @@ public:
     ThreadPool& operator=(const ThreadPool&) = delete;
 
     // 提交任务：加锁入队，解锁后通知一个空闲线程
-    void Submit(std::function<void()> task) {
+    // 线程池已停止时拒绝提交；检查和入队必须在同一把锁内，否则 stop 可能插在中间
+    bool Submit(std::function<void()> task) {
         {
             std::lock_guard<std::mutex> guard(mutex_);
+            if (stop_) {
+                return false;
+            }
             tasks_.push(std::move(task));
         }
         cond_.notify_one();
+        return true;
     }
 
     // 停止：置标志 -> 唤醒所有线程 -> 等它们干完手里的活退出
